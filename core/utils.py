@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyboy import WindowEvent
+from pyboy.utils import WindowEvent
 
 # Action map
 action_map = {
@@ -195,7 +195,7 @@ def drop_down(pyboy):
     # a new piece to spawn and have y_value of start_y.
     # The bool started_moving is used to prevent the loop not running at start.
     started_moving = False
-    while pyboy.get_memory_value(0xc201) != start_y or not started_moving:
+    while pyboy.memory[0xc201] != start_y or not started_moving:
         started_moving = True
         do_down(pyboy)
 

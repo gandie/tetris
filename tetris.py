@@ -24,23 +24,23 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
-epochs = 50
+epochs = 2
 population = None
 run_per_child = 3
 max_fitness = 0
-pop_size = 50
+pop_size = 25
 max_score = 999999
-n_workers = cpu_count()
+n_workers = 10 #cpu_count()
 
 
 def eval_network(epoch, child_index, child_model):
-    pyboy = PyBoy('tetris_1.1.gb', game_wrapper=True, window_type="headless")
+    pyboy = PyBoy('tetris_1.1.gb', window="SDL2")  # window="null" for headless
     pyboy.set_emulation_speed(0)
-    tetris = pyboy.game_wrapper()
+    tetris = pyboy.game_wrapper
     tetris.start_game()
 
     # Set block animation to fall instantly
-    pyboy.set_memory_value(0xff9a, 2)
+    pyboy.memory[0xff9a] = 2
 
     run = 0
     scores = []
@@ -58,7 +58,7 @@ def eval_network(epoch, child_index, child_model):
         s_lines = tetris.lines
 
         # Determine how many possible rotations we need to check for the block
-        block_tile = pyboy.get_memory_value(0xc203)
+        block_tile = pyboy.memory[0xc203]
         turns_needed = check_needed_turn(block_tile)
         lefts_needed, rights_needed = check_needed_dirs(block_tile)
 
