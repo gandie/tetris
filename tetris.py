@@ -3,7 +3,6 @@ import pickle
 import numpy as np
 import torch
 import logging
-import sys
 
 from datetime import datetime
 from core.gen_algo import get_score, Population
@@ -12,6 +11,8 @@ from core.utils import check_needed_turn, do_action, drop_down, \
 from pyboy import PyBoy
 from multiprocessing import Pool, cpu_count
 
+import argparse
+import signal
 
 logger = logging.getLogger("tetris")
 logger.setLevel(logging.INFO)
@@ -24,25 +25,20 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
-epochs = 50
-population = None
-run_per_child = 3
-max_fitness = 0
-pop_size = 50
-max_score = 999999
-n_workers = cpu_count()
 
+def eval_network(epoch, child_index, child_model, run_per_child, max_score, show):
 
-def eval_network(epoch, child_index, child_model):
-    pyboy = PyBoy('tetris_1.1.gb', game_wrapper=True, window_type="headless")
+    window = "SDL2" if show else "null"
+    pyboy = PyBoy('tetris_1.1.gb', window=window)
     pyboy.set_emulation_speed(0)
-    tetris = pyboy.game_wrapper()
+    tetris = pyboy.game_wrapper
     tetris.start_game()
 
     # Set block animation to fall instantly
-    pyboy.set_memory_value(0xff9a, 2)
+    pyboy.memory[0xff9a] = 2
 
     run = 0
+    actions = 0
     scores = []
     levels = []
     lines = []
@@ -58,7 +54,7 @@ def eval_network(epoch, child_index, child_model):
         s_lines = tetris.lines
 
         # Determine how many possible rotations we need to check for the block
-        block_tile = pyboy.get_memory_value(0xc203)
+        block_tile = pyboy.memory[0xc203]
         turns_needed = check_needed_turn(block_tile)
         lefts_needed, rights_needed = check_needed_dirs(block_tile)
 
@@ -107,15 +103,17 @@ def eval_network(epoch, child_index, child_model):
             do_sideway(pyboy, 'Right')
         drop_down(pyboy)
         pyboy.tick()
+        actions += 1
 
         # Game over:
-        if tetris.game_over() or tetris.score == max_score:
+        if tetris.game_over() or tetris.score == max_score or actions > 100:
             scores.append(tetris.score)
             levels.append(tetris.level)
             lines.append(tetris.lines)
             if run == run_per_child - 1:
                 pyboy.stop()
             else:
+                actions = 0
                 tetris.reset_game()
             run += 1
 
@@ -133,9 +131,16 @@ def eval_network(epoch, child_index, child_model):
     return child_fitness
 
 
-if __name__ == '__main__':
+def initializer():
+    """Ignore CTRL+C in the worker process."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def main(n_workers, pop_size, epochs, run_per_child, max_score, show):
     e = 0
-    p = Pool(n_workers)
+    p = Pool(n_workers, initializer=initializer)
+    population = None
+    max_fitness = 0
 
     while e < epochs:
         start_time = datetime.now()
@@ -151,10 +156,17 @@ if __name__ == '__main__':
         result = [0] * pop_size
         for i in range(pop_size):
             result[i] = p.apply_async(
-                eval_network, (e, i, population.models[i]))
+                eval_network,
+                (e, i, population.models[i], run_per_child, max_score, show)
+            )
 
         for i in range(pop_size):
-            population.fitnesses[i] = result[i].get()
+            try:
+                population.fitnesses[i] = result[i].get()
+            except KeyboardInterrupt:
+                logger.error("KeyboardInterrupt, stopping ...")
+                p.terminate()
+                return
 
         logger.info("-" * 20)
         logger.info("Iteration %s fitnesses %s" % (
@@ -186,5 +198,64 @@ if __name__ == '__main__':
                 'models/%s' % file_name)
         e += 1
 
-    p.join()
     p.close()
+    p.join()
+
+
+def cli_args():
+    parser = argparse.ArgumentParser("Tetris training")
+    parser.add_argument(
+        '-e',
+        '--epochs',
+        help="How many epochs to train",
+        type=int,
+        default=2,
+    )
+    parser.add_argument(
+        '-r',
+        '--runs',
+        help="Tetris games played per child",
+        type=int,
+        default=3,
+    )
+    parser.add_argument(
+        '-p',
+        '--popsize',
+        help="Size of population",
+        type=int,
+        default=50,
+    )
+    parser.add_argument(
+        '-m',
+        '--maxscore',
+        help="Maximum score in one run, game is stopped if reached",
+        type=int,
+        default=999999,
+    )
+    parser.add_argument(
+        '-n',
+        '--numworkers',
+        help="Number of workers (pyboys) to spawn",
+        type=int,
+        default=cpu_count(),
+    )
+    parser.add_argument(
+        '-s',
+        '--show',
+        help="Do not run pyboys in headless mode, render each one in window",
+        default=False,
+        action='store_true',
+    )
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = cli_args()
+    main(
+        n_workers=args.numworkers,
+        pop_size=args.popsize,
+        epochs=args.epochs,
+        run_per_child=args.runs,
+        max_score=args.maxscore,
+        show=args.show,
+    )
