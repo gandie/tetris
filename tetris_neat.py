@@ -11,30 +11,29 @@ from core.utils import check_needed_turn, do_action, drop_down, \
 from pyboy import PyBoy
 
 
-epochs = 20
+epochs = 50
 max_fitness = 0
-blank_tile = 47
-pop_size = 50
 max_score = 999999
-n_workers = 3
+n_workers = 16
+actions_limit = 100
 
-
-def eval_genome(genome, config):
+def eval_genome(genome, config, show=False):
     global max_fitness
 
-    pyboy = PyBoy('tetris_1.1.gb', window_type='quiet',
-                  game_wrapper=True)
+    window = "SDL2" if show else "null"
+    pyboy = PyBoy('tetris.gb', window=window)
     pyboy.set_emulation_speed(0)
-    tetris = pyboy.game_wrapper()
+    tetris = pyboy.game_wrapper
     tetris.start_game()
 
     # Set block animation to fall instantly
-    pyboy.set_memory_value(0xff9a, 2)
+    pyboy.memory[0xff9a] = 2
 
     model = neat.nn.FeedForwardNetwork.create(genome, config)
     child_fitness = 0
+    actions = 0
 
-    while not pyboy.tick():
+    while True:#not pyboy.tick():
         # Beginning of action
         best_action_score = np.NINF
         best_action = {'Turn': 0, 'Left': 0, 'Right': 0}
@@ -44,7 +43,7 @@ def eval_genome(genome, config):
         s_lines = tetris.lines
 
         # Determine how many possible rotations we need to check for the block
-        block_tile = pyboy.get_memory_value(0xc203)
+        block_tile = pyboy.memory[0xc203]
         turns_needed = check_needed_turn(block_tile)
         lefts_needed, rights_needed = check_needed_dirs(block_tile)
 
@@ -93,12 +92,21 @@ def eval_genome(genome, config):
             do_sideway(pyboy, 'Right')
         drop_down(pyboy)
         pyboy.tick()
+        actions += 1
+
+        game_over = tetris.game_over()
+        got_highscore = tetris.score == max_score
+        actions_depleted = actions > actions_limit
 
         # Game over:
-        if tetris.game_over() or tetris.score == max_score:
+        # if tetris.game_over() or tetris.score == max_score or actions > 100:
+        if game_over or got_highscore or actions_depleted:
             child_fitness = tetris.score
             if tetris.score == max_score:
                 print("Max score reached")
+            # punish loosing
+            if game_over:
+                child_fitness *= 0.5
             break
 
     # Dump best model
@@ -117,9 +125,9 @@ def run(config_path):
                                 neat.DefaultSpeciesSet, neat.DefaultStagnation,
                                 config_path)
 
-    # p = neat.Population(config)
+    #p = neat.Population(config)
     # Uncomment to load from checkpoint
-    p = neat.Checkpointer().restore_checkpoint('checkpoint/neat-checkpoint-2')
+    p = neat.Checkpointer().restore_checkpoint('checkpoint/neat-checkpoint-18')
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
@@ -138,9 +146,9 @@ def run(config_path):
                   -4: 'cleared', -5: 'num_pits', -6: 'max_wells',
                   -7: 'n_cols_with_holes', -8: 'row_transitions',
                   -9: 'col_transitions', 0: 'Score'}
-    visualize.draw_net(config, winner, True, node_names=node_names)
-    visualize.plot_stats(stats, ylog=False, view=True)
-    visualize.plot_species(stats, view=True)
+    #visualize.draw_net(config, winner, True, node_names=node_names)
+    #visualize.plot_stats(stats, ylog=False, view=True)
+    #visualize.plot_species(stats, view=True)
 
 
 if __name__ == '__main__':
