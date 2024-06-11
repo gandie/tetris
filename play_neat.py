@@ -42,10 +42,21 @@ def main(model_path, runs, draw, config_path):
         config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                                     neat.DefaultSpeciesSet, neat.DefaultStagnation,
                                     config_path)
-        node_names = {-1: 'agg_height', -2: 'n_holes', -3: 'bumpiness',
-                    -4: 'cleared', -5: 'num_pits', -6: 'max_wells',
-                    -7: 'n_cols_with_holes', -8: 'row_transitions',
-                    -9: 'col_transitions', 0: 'Score'}
+        node_names = {
+            -1: 'agg_height',
+            -2: 'n_holes',
+            -3: 'bumpiness',
+            -4: 'cleared',
+            -5: 'num_pits',
+            -6: 'max_wells',
+            -7: 'n_cols_with_holes',
+            -8: 'row_transitions',
+            -9: 'col_transitions',
+            -10: 'block_bit_1',
+            -11: 'block_bit_2',
+            -12: 'block_bit_3',
+            0: 'Score',
+        }
 
         with open(model_path + '_genome', 'rb') as f:
             genome = pickle.load(f)

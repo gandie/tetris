@@ -38,7 +38,7 @@ def get_current_block_text(block_tile):
         return 'T'
 
 
-def get_board_info(area, tetris, s_lines):
+def get_board_info(area, tetris, s_lines, next_block):
     """
     area: a numpy matrix representation of the board
     tetris: game wrapper
@@ -76,8 +76,19 @@ def get_board_info(area, tetris, s_lines):
     # The number of lines gained with the move
     cleared = (tetris.lines - s_lines) * 8
 
+    next_block_bits = {
+        "L": (0,0,0),
+        "J": (0,0,1),
+        "I": (0,1,0),
+        "O": (0,1,1),
+        "Z": (1,0,0),
+        "S": (1,0,1),
+        "T": (1,1,0),
+    }
+    bits = next_block_bits[next_block]
+
     return agg_height, n_holes, bumpiness, cleared, num_pits, max_wells, \
-        n_cols_with_holes, row_transitions, col_transitions
+        n_cols_with_holes, row_transitions, col_transitions, bits[0], bits[1], bits[2]
 
 
 def get_peaks(area):
@@ -236,6 +247,7 @@ def do_best_action(get_score, pyboy, tetris, model, neat):
     block_tile = pyboy.memory[0xc203]
     turns_needed = check_needed_turn(block_tile)
     lefts_needed, rights_needed = check_needed_dirs(block_tile)
+    next_block = tetris.next_tetromino()
 
     actions = {
         'Middle': 1,
@@ -246,7 +258,7 @@ def do_best_action(get_score, pyboy, tetris, model, neat):
     for action, n_dir in actions.items():
         for move_dir in do_action(action, pyboy, n_dir=n_dir,
                                   n_turn=turns_needed):
-            score = get_score(tetris, model, s_lines, neat=neat)
+            score = get_score(tetris, model, s_lines, neat=neat, next_block=next_block)
             if score is not None and score > best_child_score:
                 best_child_score = score
                 best_action = move_dir.copy()
