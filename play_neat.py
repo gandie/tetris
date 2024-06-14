@@ -22,7 +22,7 @@ def main(model_path, runs, draw, config_path):
 
     while n < runs:
 
-        best_action = do_best_action(get_score, pyboy, tetris, model, neat=True)
+        do_best_action(get_score, pyboy, tetris, model, neat=True)
 
         if tetris.game_over():
             print(tetris.score)
@@ -39,9 +39,13 @@ def main(model_path, runs, draw, config_path):
     print("Average:", np.average(lines))
 
     if draw:
-        config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                                    neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                                    config_path)
+        config = neat.config.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            config_path,
+        )
         node_names = {
             -1: 'agg_height',
             -2: 'n_holes',
