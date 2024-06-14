@@ -23,7 +23,7 @@ def eval_genome(genome, config):
 
     while True:
 
-        best_action = do_best_action(get_score, pyboy, tetris, model, neat=True)
+        do_best_action(get_score, pyboy, tetris, model, neat=True)
         actions += 1
 
         game_over = tetris.game_over()

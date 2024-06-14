@@ -1,4 +1,3 @@
-import io
 import pickle
 import numpy as np
 import torch
@@ -24,7 +23,8 @@ ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
 
-def eval_network(epoch, child_index, child_model, run_per_child, max_score, show, action_limit):
+def eval_network(epoch, child_index, child_model, run_per_child, max_score,
+                 show, action_limit):
 
     pyboy, tetris = spawn_pyboy(show=show)
 
@@ -36,11 +36,14 @@ def eval_network(epoch, child_index, child_model, run_per_child, max_score, show
 
     while run < run_per_child:
 
-        best_action = do_best_action(get_score, pyboy, tetris, child_model, neat=False)
+        do_best_action(get_score, pyboy, tetris, child_model, neat=False)
         actions += 1
 
+        highscore = tetris.score == max_score
+        actions_depleted = actions > action_limit
+
         # Game over:
-        if tetris.game_over() or tetris.score == max_score or actions > action_limit:
+        if tetris.game_over() or highscore or actions_depleted:
             scores.append(tetris.score)
             levels.append(tetris.level)
             lines.append(tetris.lines)
@@ -70,7 +73,8 @@ def initializer():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def main(n_workers, pop_size, epochs, run_per_child, max_score, show, action_limit):
+def main(n_workers, pop_size, epochs, run_per_child, max_score,
+         show, action_limit):
     # TODO: pass optional checkpoint path to continue training from,
     # instead of manually setting epoch counter here
     e = 0
@@ -94,7 +98,15 @@ def main(n_workers, pop_size, epochs, run_per_child, max_score, show, action_lim
         for i in range(pop_size):
             result[i] = p.apply_async(
                 eval_network,
-                (e, i, population.models[i], run_per_child, max_score, show, action_limit)
+                (
+                    e,
+                    i,
+                    population.models[i],
+                    run_per_child,
+                    max_score,
+                    show,
+                    action_limit,
+                )
             )
 
         for i in range(pop_size):
