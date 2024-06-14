@@ -6,9 +6,7 @@ import logging
 
 from datetime import datetime
 from core.gen_algo import get_score, Population
-from core.utils import check_needed_turn, do_action, drop_down, \
-    do_sideway, do_turn, check_needed_dirs, feature_names
-from pyboy import PyBoy
+from core.utils import feature_names, spawn_pyboy, do_best_action
 from multiprocessing import Pool, cpu_count
 
 import argparse
@@ -26,16 +24,9 @@ ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
 
-def eval_network(epoch, child_index, child_model, run_per_child, max_score, show):
+def eval_network(epoch, child_index, child_model, run_per_child, max_score, show, action_limit):
 
-    window = "SDL2" if show else "null"
-    pyboy = PyBoy('tetris_1.1.gb', window=window)
-    pyboy.set_emulation_speed(0)
-    tetris = pyboy.game_wrapper
-    tetris.start_game()
-
-    # Set block animation to fall instantly
-    pyboy.memory[0xff9a] = 2
+    pyboy, tetris = spawn_pyboy(show=show)
 
     run = 0
     actions = 0
@@ -44,69 +35,12 @@ def eval_network(epoch, child_index, child_model, run_per_child, max_score, show
     lines = []
 
     while run < run_per_child:
-        # Beginning of action
-        best_action_score = np.NINF
-        best_action = {'Turn': 0, 'Left': 0, 'Right': 0}
-        begin_state = io.BytesIO()
-        begin_state.seek(0)
-        pyboy.save_state(begin_state)
-        # Number of lines at the start
-        s_lines = tetris.lines
 
-        # Determine how many possible rotations we need to check for the block
-        block_tile = pyboy.memory[0xc203]
-        turns_needed = check_needed_turn(block_tile)
-        lefts_needed, rights_needed = check_needed_dirs(block_tile)
-
-        # Do middle
-        for move_dir in do_action('Middle', pyboy, n_dir=1,
-                                  n_turn=turns_needed):
-            score = get_score(tetris, child_model, s_lines)
-            if score is not None and score >= best_action_score:
-                best_action_score = score
-                best_action = {'Turn': move_dir['Turn'],
-                               'Left': move_dir['Left'],
-                               'Right': move_dir['Right']}
-            begin_state.seek(0)
-            pyboy.load_state(begin_state)
-
-        # Do left
-        for move_dir in do_action('Left', pyboy, n_dir=lefts_needed,
-                                  n_turn=turns_needed):
-            score = get_score(tetris, child_model, s_lines)
-            if score is not None and score >= best_action_score:
-                best_action_score = score
-                best_action = {'Turn': move_dir['Turn'],
-                               'Left': move_dir['Left'],
-                               'Right': move_dir['Right']}
-            begin_state.seek(0)
-            pyboy.load_state(begin_state)
-
-        # Do right
-        for move_dir in do_action('Right', pyboy, n_dir=rights_needed,
-                                  n_turn=turns_needed):
-            score = get_score(tetris, child_model, s_lines)
-            if score is not None and score >= best_action_score:
-                best_action_score = score
-                best_action = {'Turn': move_dir['Turn'],
-                               'Left': move_dir['Left'],
-                               'Right': move_dir['Right']}
-            begin_state.seek(0)
-            pyboy.load_state(begin_state)
-
-        # Do best action
-        for _ in range(best_action['Turn']):
-            do_turn(pyboy)
-        for _ in range(best_action['Left']):
-            do_sideway(pyboy, 'Left')
-        for _ in range(best_action['Right']):
-            do_sideway(pyboy, 'Right')
-        drop_down(pyboy)
-        pyboy.tick()
+        best_action = do_best_action(get_score, pyboy, tetris, child_model, neat=False)
         actions += 1
 
         # Game over:
-        if tetris.game_over() or tetris.score == max_score or actions > 100:
+        if tetris.game_over() or tetris.score == max_score or actions > action_limit:
             scores.append(tetris.score)
             levels.append(tetris.level)
             lines.append(tetris.lines)
@@ -136,8 +70,11 @@ def initializer():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def main(n_workers, pop_size, epochs, run_per_child, max_score, show):
+def main(n_workers, pop_size, epochs, run_per_child, max_score, show, action_limit):
+    # TODO: pass optional checkpoint path to continue training from,
+    # instead of manually setting epoch counter here
     e = 0
+
     p = Pool(n_workers, initializer=initializer)
     population = None
     max_fitness = 0
@@ -157,7 +94,7 @@ def main(n_workers, pop_size, epochs, run_per_child, max_score, show):
         for i in range(pop_size):
             result[i] = p.apply_async(
                 eval_network,
-                (e, i, population.models[i], run_per_child, max_score, show)
+                (e, i, population.models[i], run_per_child, max_score, show, action_limit)
             )
 
         for i in range(pop_size):
@@ -212,6 +149,13 @@ def cli_args():
         default=2,
     )
     parser.add_argument(
+        '-a',
+        '--action_limit',
+        help="Maximum number of moves to make in simulation",
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
         '-r',
         '--runs',
         help="Tetris games played per child",
@@ -258,4 +202,5 @@ if __name__ == '__main__':
         run_per_child=args.runs,
         max_score=args.maxscore,
         show=args.show,
+        action_limit=args.action_limit,
     )

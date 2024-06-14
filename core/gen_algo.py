@@ -102,7 +102,13 @@ def get_score(tetris, model, s_lines, neat=False, next_block=None):
     area = (area != 47).astype(np.int16)
 
     try:
-        inputs = get_board_info(area, tetris, s_lines, next_block=next_block)
+        inputs = get_board_info(
+            area,
+            tetris,
+            s_lines,
+            next_block=next_block,
+            neat=neat
+        )
     except Exception as e:
         print(e)
         return None

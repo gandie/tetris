@@ -9,10 +9,10 @@ from core.gen_algo import get_score
 from core.utils import do_best_action, spawn_pyboy
 
 
-def eval_genome(genome, config, show=False):
+def eval_genome(genome, config):
 
-    pyboy, tetris = spawn_pyboy(show=show)
     args = config.custom_args
+    pyboy, tetris = spawn_pyboy(show=args.show)
 
     # Set block animation to fall instantly
     pyboy.memory[0xff9a] = 2
@@ -105,7 +105,7 @@ def cli_args():
     parser.add_argument(
         '-c',
         '--checkpoint_path',
-        help="Path to checkpoint to continue simultion",
+        help="Path to checkpoint to continue simulation",
         type=str,
     )
     parser.add_argument(
@@ -128,6 +128,13 @@ def cli_args():
         help="Maximum number of moves to make in simulation",
         type=int,
         default=100,
+    )
+    parser.add_argument(
+        '-s',
+        '--show',
+        help="Do not run pyboys in headless mode, render each one in window",
+        default=False,
+        action='store_true',
     )
     parser.add_argument(
         '-d',
